@@ -1,4 +1,5 @@
-import { platform } from '@local-projects/sdk';
+// 浏览器里用平台注入的全局 SDK；Node 测试通过依赖注入传入隔离适配器。
+const platform = typeof window !== 'undefined' ? window.panda : undefined;
 
 const MAX_RECORDS = 10000;
 const LANGUAGES = new Set(['zh', 'en']);

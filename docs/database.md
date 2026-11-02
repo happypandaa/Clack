@@ -1,6 +1,6 @@
 # Clack 数据库
 
-Clack 是 project-v1 前端项目，网页通过项目自带的 `@local-projects/sdk` 0.1.0 访问平台 SQLite。业务无需 Node 服务、外部网络或浏览器存储。数据库为项目的 `data/main.sqlite`，由平台管理；不在源码中写数据库路径、端口、令牌或项目身份。
+Clack 是网页应用，网页通过平台注入的 `/_platform/sdk.js`（`window.panda`）访问平台 SQLite。业务无需 Node 服务、外部网络或浏览器存储。数据库为项目的 `data/main.sqlite`，由平台管理；不在源码中写数据库路径、端口、令牌或项目身份。
 
 ## 表结构
 
@@ -26,7 +26,7 @@ Clack 是 project-v1 前端项目，网页通过项目自带的 `@local-projects
 
 ## 初始化与兼容
 
-初始化 SQL 为 [schema.sql](../app/db/schema.sql)，包含两张表、索引和触发器四条可重复执行的 `CREATE ... IF NOT EXISTS`。由开发者在核对平台 `db schema` 后通过公开 CLI 的 `db transaction` 初始化；页面启动和构建过程均不执行 DDL。触发器体内部含分号，提交时须把整个触发器作为一条 statement，不按全部分号切分。
+初始化 SQL 为 [schema.sql](../app/db/schema.sql)，包含两张表、索引和触发器四条可重复执行的 `CREATE ... IF NOT EXISTS`。由开发者在核对平台 `db schema` 后通过平台 CLI 的 `db transaction` 初始化；页面启动和构建过程均不执行 DDL。触发器体内部含分号，提交时须把整个触发器作为一条 statement，不按全部分号切分。
 
 首次初始化仅添加结构，不写练习记录或偏好、不修改已有数据。后续若结构不同，应先读取真实 schema 并制定兼容迁移；`IF NOT EXISTS` 不会修复既有不兼容结构。不得替换数据库或清理 WAL/SHM。
 

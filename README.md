@@ -1,6 +1,6 @@
 # Clack
 
-一个简单的中英文打字练习应用。使用原生 HTML、CSS 和 JavaScript，运行于熊猫小抽屉的前端项目环境，通过平台 SDK 保存本地 SQLite 数据。
+一个简单的中英文打字练习应用。使用原生 HTML、CSS 和 JavaScript，运行于熊猫小抽屉的网页应用环境，通过平台 SDK（`/_platform/sdk.js` 提供的 `window.panda`）保存本地 SQLite 数据。
 
 ## 功能
 
@@ -14,7 +14,7 @@
 
 运行时使用平台提供的原生窗口、SQLite 和项目会话，无 Node 应用后端，无额外账号或在线 API。Node.js 只用于开发、测试和构建。
 
-本仓库是**前端源码项目**，需要支持 `project-v1` 与 `@local-projects/sdk` API v1 的熊猫小抽屉环境。直接双击 HTML、打开 Vite 地址或部署至 GitHub Pages 无法提供平台数据库和会话。
+本仓库是**网页应用源码项目**，通过根目录的 `panda.json` 声明类型（`runtime: web`）、网页入口和构建脚本。直接双击 HTML、打开 Vite 地址或部署至 GitHub Pages 无法提供平台数据库和会话。
 
 ## 开发与验证
 
@@ -27,16 +27,13 @@ npm test
 npm run build
 ```
 
-本地构建产物为 `app/dist/`。平台构建会传入绝对 `--outDir`，以平台候选构建和发布结果为准。构建过程不会初始化或修改数据库。
+本地构建产物为 `app/dist/`。平台按 `panda.json` 的 `development.build` 执行 `npm run build`，产物位置以 `web.root` 为准。构建过程不会初始化或修改数据库。
 
 ## 接入自己的平台项目
 
-1. 在平台创建前端项目，取得该项目的 CLI 路径、项目 ID 和交接说明。
-2. 将本仓库的 `app/` 与 `docs/` 放入该项目。对照 [project.example.json](project.example.json) 合并配置，保留平台生成的真实项目 ID、数据库路径和归属；示例中的 ID 是占位符。
-3. 先通过平台 CLI 查询现有 schema，再使用 [app/db/schema.sql](app/db/schema.sql) 初始化表结构。使用平台事务提交四条完整语句；触发器内部包含分号，不应简单按所有分号拆分。
-4. 使用平台 CLI 构建并等待任务成功，再从平台原生窗口打开。
-
-平台命令中的 CLI 路径和项目 ID 应以你的平台交接说明为准。数据库初始化由开发者明确执行，页面启动不会自动创建或重置表。
+1. 在平台「添加本地项目」选择本仓库根目录（已含 `panda.json`），或「从 Git 添加」本仓库。
+2. 首次打开前，先通过平台 CLI 查询现有 schema，再使用 [app/db/schema.sql](app/db/schema.sql) 初始化表结构。使用平台事务提交四条完整语句；触发器内部包含分号，不应简单按所有分号拆分。
+3. 打开平台原生窗口使用。平台规则见熊猫小抽屉随附的 skill。
 
 ## 文件结构
 
@@ -45,10 +42,9 @@ npm run build
 | `app/web/` | 页面、样式、内置文章、打字逻辑、全文输入行及存储适配 |
 | `app/tests/` | 打字、渲染和平台存储的隔离测试 |
 | `app/db/schema.sql` | 数据库初始化 DDL，无练习数据 |
-| `app/vendor/` | 固定版本的平台 SDK，构建不依赖另一个源码仓库 |
 | `docs/database.md` | 表结构、统计单位和读写约定 |
 | `docs/platform.md` | 平台 SDK 接口与运行约束 |
-| `project.example.json` | 不含个人项目身份的清单示例 |
+| `panda.json` | 应用类型、网页入口和构建声明 |
 
 ## 数据与隐私
 

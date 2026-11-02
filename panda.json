@@ -1,0 +1,17 @@
+{
+  "manifestVersion": 1,
+  "runtime": "web",
+  "app": {
+    "name": "Clack",
+    "version": "0.1.0",
+    "description": "中英文打字练习：选文章、两行实时校验、分语言历史统计。"
+  },
+  "web": { "root": "app/dist", "entry": "index.html" },
+  "platform": { "sdkApiVersion": 1 },
+  "development": { "sourceDir": "app", "build": { "kind": "npm", "script": "build" } },
+  "documentation": {
+    "readme": "README.md",
+    "development": "docs/platform.md",
+    "database": "docs/database.md"
+  }
+}
