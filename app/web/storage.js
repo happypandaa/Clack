@@ -53,12 +53,13 @@ function compact(value) {
 }
 
 /** Dependency injection is only for isolated tests; the application uses platform. */
-export function createStorageAdapter(sdk = platform) {
+export function createStorageAdapter(sdk = platform, loadSchema = async () => (await import('../db/schema.sql?raw')).default) {
   let state = initial();
   let mode = 'unavailable';
   let pending = Promise.resolve();
   let stopEvents;
   let reloadRequired = false;
+  let schemaReady = false;
   const listeners = new Set();
   const emit = event => { for (const listener of listeners) { try { listener(event); } catch { /* UI listeners cannot interrupt persistence. */ } } };
   const serialize = operation => {
@@ -99,6 +100,17 @@ export function createStorageAdapter(sdk = platform) {
 
   async function readState() {
     const info = await context();
+    if (!schemaReady) {
+      const schema = await sdk.db.schema();
+      const tables = new Set(schema.tables.map(table => table.name));
+      if (!tables.has('clack_settings') || !tables.has('clack_records')) {
+        // Split only between the four CREATE statements, keeping the trigger body intact.
+        const statements = (await loadSchema()).trim().split(/;\s*(?=CREATE\b)/i)
+          .map(sql => ({ sql, params: [] }));
+        await sdk.db.transaction({ statements });
+      }
+      schemaReady = true;
+    }
     const pageSize = Math.max(1, Math.min(200, info.limits?.sqlMaxRows || 200,
       Math.floor((info.limits?.sqlResultMaxBytes || 8_000_000) / 8000)));
     const savedSettings = await sdk.db.execute({

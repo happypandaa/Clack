@@ -33,6 +33,9 @@ function fixture(t, { initialize = true, limits = {} } = {}) {
       return structuredClone(context);
     } },
     db: {
+      async schema() {
+        return { tables: database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() };
+      },
       async execute(request) { return execute(request); },
       async transaction({ statements }) {
         stats.transactions += 1;
@@ -50,7 +53,7 @@ function fixture(t, { initialize = true, limits = {} } = {}) {
       subscribe(listener) { eventListeners.add(listener); return () => eventListeners.delete(listener); },
     },
   };
-  const adapter = createStorageAdapter(sdk);
+  const adapter = createStorageAdapter(sdk, async () => schema);
   t.after(() => { adapter.dispose(); database.close(); });
   return { adapter, sdk, database, stats, context, emit: event => eventListeners.forEach(listener => listener(event)) };
 }
@@ -116,13 +119,57 @@ test('unknown write outcome is not replayed, explicit retry first verifies persi
   assert.equal(stats.transactions, 1);
 });
 
-test('an unavailable platform or missing schema never falls back to browser storage or DDL', async t => {
+test('first use prepares an empty database and saved results survive reopening', async t => {
+  const { adapter, sdk, database, stats } = fixture(t, { initialize: false });
+  assert.deepEqual(await adapter.loadState(), { version: 1, settings: { uiLanguage: 'zh', articleLanguage: 'zh' }, records: [] });
+  assert.equal(adapter.storageMode(), 'platform');
+  assert.equal(stats.transactions, 1);
+  await adapter.saveSettings({ articleLanguage: 'en' });
+  await adapter.saveRecord(sample());
+  const reopened = createStorageAdapter(sdk);
+  t.after(() => reopened.dispose());
+  const state = await reopened.loadState();
+  assert.equal(state.settings.articleLanguage, 'en');
+  assert.deepEqual(state.records, [sample()]);
+  assert.equal(stats.transactions, 3);
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'trigger' AND name = 'clack_records_limit'").get().count, 1);
+});
+
+test('first use preserves existing records when completing a partially prepared database', async t => {
+  const { adapter, database } = fixture(t);
+  const value = sample();
+  database.prepare('INSERT INTO clack_records VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+    value.id, value.articleId, value.language, value.title, value.completedAt, value.durationMs,
+    value.speed, value.accuracy, value.correctCharacters, value.typedCharacters, value.totalCharacters);
+  database.exec('DROP TABLE clack_settings');
+  assert.deepEqual((await adapter.loadState()).records, [value]);
+  assert.equal(adapter.storageMode(), 'platform');
+});
+
+test('an unavailable platform never initializes the database or falls back to browser storage', async t => {
   const { adapter, database, stats } = fixture(t, { initialize: false });
+  stats.offline = true;
   assert.equal((await adapter.loadState()).records.length, 0);
   assert.equal(adapter.storageMode(), 'unavailable');
   await assert.rejects(adapter.saveRecord(sample()));
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table'").get().count, 0);
   assert.equal(stats.transactions, 0);
+});
+
+test('failed initialization rolls back and a later explicit load can retry', async t => {
+  const { sdk, database, stats } = fixture(t, { initialize: false });
+  let schemaText = `${schema}\nCREATE TABLE broken (`;
+  const adapter = createStorageAdapter(sdk, async () => schemaText);
+  t.after(() => adapter.dispose());
+  await adapter.loadState();
+  assert.equal(adapter.storageMode(), 'unavailable');
+  assert.equal(database.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table'").get().count, 0);
+  assert.equal(stats.transactions, 1);
+  schemaText = schema;
+  await adapter.loadState();
+  assert.equal(adapter.storageMode(), 'platform');
+  assert.equal(stats.transactions, 2);
+  assert.deepEqual((await adapter.saveRecord(sample())).records, [sample()]);
 });
 
 test('invalid imports and body limits fail before any writes, existing records remain intact', async t => {
