@@ -3,6 +3,11 @@ CREATE TABLE IF NOT EXISTS clack_settings (
   value TEXT NOT NULL CHECK (value IN ('zh', 'en'))
 ) STRICT;
 
+CREATE TABLE IF NOT EXISTS clack_preferences (
+  key TEXT NOT NULL PRIMARY KEY CHECK (key IN ('theme')),
+  value TEXT NOT NULL CHECK (value IN ('ink', 'pine', 'tea'))
+) STRICT;
+
 CREATE TABLE IF NOT EXISTS clack_records (
   id TEXT NOT NULL PRIMARY KEY CHECK (length(id) BETWEEN 1 AND 160),
   article_id TEXT NOT NULL CHECK (length(article_id) BETWEEN 1 AND 160),

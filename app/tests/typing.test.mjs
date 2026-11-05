@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   advanceSession, commitInputAndAdvance, createSession, elapsed, graphemes, metrics, pauseSession,
-  resumeSession, splitText, updateInput,
+  resumeSession, retreatSession, splitText, updateInput,
 } from '../web/typing.js';
 import { articles } from '../web/articles.js';
 
@@ -32,7 +32,7 @@ test('bundled English passages never start a new chunk with an invisible space',
 test('graphemes stay intact when chunking or accepting Unicode input', () => {
   const text = '你👨‍👩‍👧‍👦好e\u0301！';
   assert.equal(graphemes(text).length, 5);
-  assert.deepEqual(splitText(text, 'zh', 2), ['你👨‍👩‍👧‍👦', '好e\u0301', '！']);
+  assert.deepEqual(splitText(text, 'zh', 2), ['你👨‍👩‍👧‍👦', '好', 'e\u0301！']);
   const session = createSession(article(text, 'zh'), 40, 0);
   updateInput(session, text, 100);
   assert.equal(session.submitted, 5);
@@ -201,7 +201,7 @@ test('one batch can finish multiple Unicode rows without splitting graphemes or 
   const result = commitInputAndAdvance(session, text + '多余', 100);
   assert.deepEqual(result, { advanced: 4, completed: true });
   assert.equal(session.completedInputs.join(''), text);
-  assert.deepEqual(session.completedInputs, ['你👨‍👩‍👧‍👦', '好e\u0301', '世界', '！']);
+  assert.deepEqual(session.completedInputs, ['你👨‍👩‍👧‍👦', '好e\u0301', '世', '界！']);
   assert.equal(session.submitted, 7);
   assert.equal(session.correctSubmitted, 7);
   assert.equal(metrics(session, 100000).elapsedMs, 0);
@@ -249,4 +249,55 @@ test('unfinished edits stay on their row and shifted old text is not submitted t
   assert.equal(session.input, 'b');
   assert.equal(session.submitted, 5, 'three prior submissions plus the two new inserted characters');
   assert.equal(session.correctSubmitted, 3);
+});
+
+test('Chinese rows break after punctuation and never start with a closing mark', () => {
+  const text = '早上好。推开窗，清新的空气来到身边。给自己倒一杯温水，整理好桌面，再坐下来开始今天的练习。';
+  const chunks = splitText(text, 'zh', 24);
+  assert.equal(chunks.join(''), text);
+  assert.deepEqual(chunks, ['早上好。推开窗，清新的空气来到身边。', '给自己倒一杯温水，整理好桌面，', '再坐下来开始今天的练习。']);
+  assert.deepEqual(splitText('甲乙丙丁戊，己', 'zh', 5), ['甲乙丙丁', '戊，己']);
+  assert.deepEqual(splitText('甲乙丙“丁戊己', 'zh', 4), ['甲乙丙', '“丁戊己']);
+  for (const passage of articles.filter((entry) => entry.language === 'zh')) {
+    for (const limit of [12, 18, 24, 32]) {
+      const chunks = splitText(passage.text, passage.language, limit);
+      assert.equal(chunks.join(''), passage.text);
+      assert.ok(chunks.every((chunk) => [...chunk].length <= limit), `${passage.id} at ${limit}`);
+      assert.ok(chunks.slice(1).every((chunk) => !/^[，。、；：！？”’）》」]/u.test(chunk)), `${passage.id} at ${limit}`);
+    }
+  }
+});
+
+test('backspace at the start of a row reopens the previous row without its last character', () => {
+  const session = createSession(article('甲乙丙丁', 'zh'), 2, 0);
+  assert.equal(retreatSession(session), false, 'nothing to go back to before typing');
+  commitInputAndAdvance(session, '甲乙', 100);
+  assert.equal(session.index, 1);
+  assert.equal(retreatSession(session), true);
+  assert.equal(session.index, 0);
+  assert.equal(session.input, '甲');
+  assert.deepEqual(session.completedInputs, []);
+  assert.equal(metrics(session, 200).typedCharacters, 1);
+  assert.equal(metrics(session, 200).correctCharacters, 1);
+  commitInputAndAdvance(session, '甲乙', 300);
+  commitInputAndAdvance(session, '丙丁', 400);
+  assert.equal(session.status, 'complete');
+  const m = metrics(session, 400);
+  assert.equal(m.typedCharacters, 4);
+  assert.equal(m.correctCharacters, 4);
+  assert.equal(m.progress, 100);
+  assert.equal(session.submitted, 5, 'retyped 乙 is a new submission');
+});
+
+test('going back is refused while the row has text, while paused, and after completion', () => {
+  const session = createSession(article('ab', 'en'), 1, 0);
+  commitInputAndAdvance(session, 'a', 100);
+  updateInput(session, 'x', 150);
+  assert.equal(retreatSession(session), false);
+  updateInput(session, '', 160);
+  pauseSession(session, 170);
+  assert.equal(retreatSession(session), false);
+  resumeSession(session, 180);
+  assert.equal(retreatSession(session), true);
+  assert.equal(session.input, '');
 });

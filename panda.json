@@ -4,7 +4,7 @@
   "app": {
     "name": "Clack",
     "version": "0.1.0",
-    "description": "中英文打字练习：选文章、两行实时校验、分语言历史统计。"
+    "description": "中英文打字练习：长短不一的放松短文、逐行实时校验、错字回顾、分语言历史统计。"
   },
   "web": { "root": "app/dist", "entry": "index.html" },
   "platform": { "sdkApiVersion": 1 },

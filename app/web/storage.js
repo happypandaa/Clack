@@ -3,11 +3,13 @@ const platform = typeof window !== 'undefined' ? window.panda : undefined;
 
 const MAX_RECORDS = 10000;
 const LANGUAGES = new Set(['zh', 'en']);
+const THEMES = new Set(['ink', 'pine', 'tea']);
 const COLUMNS = 'id, article_id, language, title, completed_at, duration_ms, speed, accuracy, correct_characters, typed_characters, total_characters';
 const INSERT_RECORDS = `INSERT INTO clack_records (${COLUMNS})
   SELECT ${Array.from({ length: 11 }, (_, index) => `json_extract(value, '$[${index}]')`).join(', ')}
   FROM json_each(?) WHERE 1 ON CONFLICT(id) DO NOTHING`;
-const initial = () => ({ version: 1, settings: { uiLanguage: 'zh', articleLanguage: 'zh' }, records: [] });
+const defaults = () => ({ uiLanguage: 'zh', articleLanguage: 'zh', theme: 'ink' });
+const initial = () => ({ version: 1, settings: defaults(), records: [] });
 const copy = value => structuredClone(value);
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const text = (value, max) => typeof value === 'string' && value.trim().length > 0 && value.length <= max;
@@ -103,8 +105,9 @@ export function createStorageAdapter(sdk = platform, loadSchema = async () => (a
     if (!schemaReady) {
       const schema = await sdk.db.schema();
       const tables = new Set(schema.tables.map(table => table.name));
-      if (!tables.has('clack_settings') || !tables.has('clack_records')) {
-        // Split only between the four CREATE statements, keeping the trigger body intact.
+      if (!tables.has('clack_settings') || !tables.has('clack_records') || !tables.has('clack_preferences')) {
+        // Split only between the CREATE statements, keeping the trigger body intact.
+        // Every statement is IF NOT EXISTS, so older databases only gain what is missing.
         const statements = (await loadSchema()).trim().split(/;\s*(?=CREATE\b)/i)
           .map(sql => ({ sql, params: [] }));
         await sdk.db.transaction({ statements });
@@ -117,12 +120,21 @@ export function createStorageAdapter(sdk = platform, loadSchema = async () => (a
       sql: "SELECT MAX(CASE key WHEN 'uiLanguage' THEN value END) AS ui_language, MAX(CASE key WHEN 'articleLanguage' THEN value END) AS article_language FROM clack_settings",
       params: [], options: { maxRows: 1 },
     });
-    const settings = { uiLanguage: 'zh', articleLanguage: 'zh' };
+    const settings = defaults();
     const saved = savedSettings.rows[0] || {};
     for (const [key, column] of [['uiLanguage', 'ui_language'], ['articleLanguage', 'article_language']]) {
       if (saved[column] === null || saved[column] === undefined) continue;
       if (!LANGUAGES.has(saved[column])) throw failure('已保存的语言设置格式无效。');
       settings[key] = saved[column];
+    }
+    // The theme lives in its own table: clack_settings only accepts language values.
+    const savedTheme = await sdk.db.execute({
+      sql: "SELECT value FROM clack_preferences WHERE key = 'theme'", params: [], options: { maxRows: 1 },
+    });
+    const theme = savedTheme.rows[0]?.value;
+    if (theme !== undefined && theme !== null) {
+      if (!THEMES.has(theme)) throw failure('已保存的主题设置格式无效。');
+      settings.theme = theme;
     }
     const records = [];
     let cursor = null;
@@ -191,13 +203,13 @@ export function createStorageAdapter(sdk = platform, loadSchema = async () => (a
     storageMode: () => mode,
     saveSettings(value) {
       if (!object(value)) return Promise.reject(failure('invalidData'));
-      const entries = Object.entries(value).filter(([key]) => ['uiLanguage', 'articleLanguage'].includes(key));
-      if (entries.some(([, language]) => !LANGUAGES.has(language))) return Promise.reject(failure('invalidData'));
+      const entries = Object.entries(value).filter(([key]) => ['uiLanguage', 'articleLanguage', 'theme'].includes(key));
+      if (entries.some(([key, item]) => !(key === 'theme' ? THEMES : LANGUAGES).has(item))) return Promise.reject(failure('invalidData'));
       return mutate(async () => {
         if (!entries.length) return;
-        await sdk.db.transaction({ statements: entries.map(([key, language]) => ({
-          sql: 'INSERT INTO clack_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
-          params: [key, language],
+        await sdk.db.transaction({ statements: entries.map(([key, item]) => ({
+          sql: 'INSERT INTO ' + (key === 'theme' ? 'clack_preferences' : 'clack_settings') + ' (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+          params: [key, item],
         })) });
       });
     },

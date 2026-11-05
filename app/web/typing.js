@@ -11,6 +11,10 @@ export function graphemes(text) {
     : Array.from(value);
 }
 
+// Closing marks may end a line but never begin one; opening marks the reverse.
+const CLOSING = new Set([...'，。、；：！？…）》」』”’,.;:!?)]}']);
+const OPENING = new Set([...'（《「『“‘([{']);
+
 export function splitText(text, language, maxLength = 40) {
   const characters = graphemes(text);
   const limit = Number.isFinite(maxLength) ? Math.max(1, Math.floor(maxLength)) : 40;
@@ -18,13 +22,33 @@ export function splitText(text, language, maxLength = 40) {
   let offset = 0;
   while (offset < characters.length) {
     let end = Math.min(offset + limit, characters.length);
-    if (language === 'en' && end < characters.length) {
-      // Keep the separator in the preceding chunk: joining the chunks always
-      // restores the original, including repeated spaces and punctuation.
-      for (let position = end - 1; position > offset; position -= 1) {
-        if (/\s/u.test(characters[position])) {
-          end = position + 1;
-          break;
+    if (end < characters.length) {
+      if (language === 'en') {
+        // Keep the separator in the preceding chunk: joining the chunks always
+        // restores the original, including repeated spaces and punctuation.
+        for (let position = end - 1; position > offset; position -= 1) {
+          if (/\s/u.test(characters[position])) {
+            end = position + 1;
+            break;
+          }
+        }
+      } else {
+        // Prefer ending a line right after punctuation in its last ~45%, so a
+        // phrase such as 整理好 is not torn across two rows.
+        const earliest = offset + Math.ceil(limit * 0.55);
+        let breakAt = -1;
+        for (let position = end - 1; position >= earliest && position > offset; position -= 1) {
+          if (CLOSING.has(characters[position]) && !CLOSING.has(characters[position + 1])) {
+            breakAt = position + 1;
+            break;
+          }
+        }
+        if (breakAt > offset) end = breakAt;
+        else {
+          // A hard cut still keeps punctuation off the start of the next row
+          // and opening marks off the end of this one.
+          while (end - 1 > offset && CLOSING.has(characters[end])) end -= 1;
+          while (end - 1 > offset && OPENING.has(characters[end - 1])) end -= 1;
         }
       }
     }
@@ -142,6 +166,22 @@ export function advanceSession(session, now = performance.now()) {
     session.startedAt = null;
     session.status = 'complete';
   }
+  return true;
+}
+
+// Backspace at the start of a row: reopen the previous row with what was typed
+// there, minus its last character. Its totals leave the completed counters, so
+// retyping the row counts it once; earlier submissions (and errors) are kept.
+export function retreatSession(session) {
+  if (session.status !== 'running' || session.index === 0 || graphemes(session.input).length) return false;
+  session.index -= 1;
+  session.input = session.completedInputs.pop() ?? '';
+  const counts = currentCounts(session);
+  session.completedCharacters -= counts.target;
+  session.completedCorrectCharacters -= counts.correct;
+  session.completedSpeedCharacters -= counts.speedCharacters;
+  session.completedTypedCharacters -= counts.typed;
+  session.input = graphemes(session.input).slice(0, -1).join('');
   return true;
 }
 

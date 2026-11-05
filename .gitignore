@@ -16,3 +16,6 @@ data/
 project.json
 clack-history*.json
 clack-export*.json
+
+# 无关的本地工作目录
+clone_work/

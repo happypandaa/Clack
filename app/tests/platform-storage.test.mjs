@@ -61,14 +61,14 @@ function fixture(t, { initialize = true, limits = {} } = {}) {
 test('platform settings and records persist independently of a frontend adapter instance', async t => {
   const { adapter, sdk, stats } = fixture(t);
   assert.equal(adapter.storageMode(), 'unavailable');
-  assert.deepEqual(await adapter.loadState(), { version: 1, settings: { uiLanguage: 'zh', articleLanguage: 'zh' }, records: [] });
+  assert.deepEqual(await adapter.loadState(), { version: 1, settings: { uiLanguage: 'zh', articleLanguage: 'zh', theme: 'ink' }, records: [] });
   assert.equal(adapter.storageMode(), 'platform');
   await adapter.saveSettings({ uiLanguage: 'en' });
   await adapter.saveRecord(sample());
   const reopened = createStorageAdapter(sdk);
   t.after(() => reopened.dispose());
   const state = await reopened.loadState();
-  assert.deepEqual(state.settings, { uiLanguage: 'en', articleLanguage: 'zh' });
+  assert.deepEqual(state.settings, { uiLanguage: 'en', articleLanguage: 'zh', theme: 'ink' });
   assert.deepEqual(state.records, [sample()]);
   assert.equal(stats.transactions, 2);
   assert.deepEqual(JSON.parse(reopened.exportState()), state);
@@ -81,7 +81,7 @@ test('history is read completely through runtime-limited keyset pages', async t 
   const state = await adapter.loadState();
   assert.equal(state.records.length, 11);
   assert.equal(new Set(state.records.map(record => record.id)).size, 11);
-  assert.equal(stats.reads, 5); // One settings read, four record pages of at most three rows.
+  assert.equal(stats.reads, 6); // Settings, theme, then four record pages of at most three rows.
 });
 
 test('parallel preferences and results are serialized without losing changes', async t => {
@@ -89,7 +89,7 @@ test('parallel preferences and results are serialized without losing changes', a
   await Promise.all([adapter.saveSettings({ uiLanguage: 'en' }), adapter.saveSettings({ articleLanguage: 'en' }),
     ...Array.from({ length: 8 }, (_, index) => adapter.saveRecord(sample(`parallel-${index}`)))]);
   const state = await adapter.loadState();
-  assert.deepEqual(state.settings, { uiLanguage: 'en', articleLanguage: 'en' });
+  assert.deepEqual(state.settings, { uiLanguage: 'en', articleLanguage: 'en', theme: 'ink' });
   assert.equal(state.records.length, 8);
 });
 
@@ -121,7 +121,7 @@ test('unknown write outcome is not replayed, explicit retry first verifies persi
 
 test('first use prepares an empty database and saved results survive reopening', async t => {
   const { adapter, sdk, database, stats } = fixture(t, { initialize: false });
-  assert.deepEqual(await adapter.loadState(), { version: 1, settings: { uiLanguage: 'zh', articleLanguage: 'zh' }, records: [] });
+  assert.deepEqual(await adapter.loadState(), { version: 1, settings: { uiLanguage: 'zh', articleLanguage: 'zh', theme: 'ink' }, records: [] });
   assert.equal(adapter.storageMode(), 'platform');
   assert.equal(stats.transactions, 1);
   await adapter.saveSettings({ articleLanguage: 'en' });
@@ -222,4 +222,17 @@ test('database notifications refresh data and project updates require explicit r
   assert.ok(events.some(event => event.type === 'reload-required'));
   await assert.rejects(adapter.saveRecord(sample()), error => error.code === 'PROJECT_RELOAD_REQUIRED');
   assert.equal(stats.transactions, 0);
+});
+
+test('theme preference is validated, saved in its own table and added to older databases', async t => {
+  const { adapter, sdk, database } = fixture(t);
+  database.exec('DROP TABLE clack_preferences');
+  assert.equal((await adapter.loadState()).settings.theme, 'ink');
+  await assert.rejects(adapter.saveSettings({ theme: 'neon' }), error => error.code === 'INVALID_DATA');
+  await adapter.saveSettings({ theme: 'tea', uiLanguage: 'en' });
+  const reopened = createStorageAdapter(sdk);
+  t.after(() => reopened.dispose());
+  assert.deepEqual((await reopened.loadState()).settings, { uiLanguage: 'en', articleLanguage: 'zh', theme: 'tea' });
+  assert.throws(() => database.prepare('INSERT INTO clack_preferences (key, value) VALUES (?, ?)').run('theme', 'neon'));
+  assert.throws(() => database.prepare('INSERT INTO clack_settings (key, value) VALUES (?, ?)').run('theme', 'ink'));
 });

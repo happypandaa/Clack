@@ -6,6 +6,8 @@ Clack 是网页应用，网页通过平台注入的 `/_platform/sdk.js`（`windo
 
 `clack_settings` 保存两项独立偏好。`key TEXT NOT NULL PRIMARY KEY` 仅允许 `uiLanguage`、`articleLanguage`；`value TEXT NOT NULL` 仅允许 `zh`、`en`。没有默认行，缺行时界面使用中文。切换文章语言不改变界面语言。
 
+`clack_preferences` 保存界面主题。`key` 仅允许 `theme`；`value` 仅允许 `ink`（墨，默认）、`pine`（松）、`tea`（茶）。缺行时使用 `ink`。主题单独成表，是因为 `clack_settings` 的约束只接受语言值，而 SQLite 不能就地修改已有表的 CHECK 约束。
+
 `clack_records` 保存完成练习的结果，所有字段非空：
 
 | 列 | 类型及约束 | 含义 |
@@ -26,7 +28,7 @@ Clack 是网页应用，网页通过平台注入的 `/_platform/sdk.js`（`windo
 
 ## 初始化与兼容
 
-初始化 SQL 为 [schema.sql](../app/db/schema.sql)，包含两张表、索引和触发器四条可重复执行的 `CREATE ... IF NOT EXISTS`。应用首次打开时通过平台 SDK 的事务自动准备，无需开发者或用户先执行 CLI 初始化。触发器体内部含分号，提交时须把整个触发器作为一条 statement，不按全部分号切分。构建过程不执行 DDL，也不读取或修改业务数据。
+初始化 SQL 为 [schema.sql](../app/db/schema.sql)，包含三张表、索引和触发器五条可重复执行的 `CREATE ... IF NOT EXISTS`。应用首次打开时通过平台 SDK 的事务自动准备，无需开发者或用户先执行 CLI 初始化。触发器体内部含分号，提交时须把整个触发器作为一条 statement，不按全部分号切分。构建过程不执行 DDL，也不读取或修改业务数据。
 
 初始化只补齐缺失的结构，不写练习记录或偏好，不替换已有结构或修改已有记录；再次打开可安全重复准备。初始化失败时保留数据库和已有记录，显示错误并允许用户明确重试，不删除数据库后重建。后续若结构不同，应先读取真实 schema 并制定兼容迁移；`IF NOT EXISTS` 不会修复既有不兼容结构。不得替换数据库或清理 WAL/SHM。
 
