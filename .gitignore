@@ -1,5 +1,5 @@
 node_modules/
-dist/
+# app/dist 是平台直接加载的构建产物，需要随源码一起提交
 .platform/
 data/
 *.sqlite

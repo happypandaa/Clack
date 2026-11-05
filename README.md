@@ -28,7 +28,7 @@ pnpm test
 pnpm run build
 ```
 
-本地构建产物为 `app/dist/`。平台按 `panda.json` 的 `development.build` 执行 `npm run build`，产物位置以 `web.root` 为准。构建过程不会初始化或修改数据库。
+构建产物为 `app/dist/`，**随源码一起提交到仓库**，这样通过链接添加应用时平台可以直接打开，不必先构建。修改 `app/web/` 后请重新执行 `pnpm run build`，把源码和 `app/dist/` 放在同一个提交里。平台需要时也会按 `panda.json` 的 `development.build` 执行 `npm run build`，产物位置以 `web.root` 为准。构建过程不会初始化或修改数据库。
 
 ## 接入自己的平台项目
 
