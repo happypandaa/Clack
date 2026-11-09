@@ -1,6 +1,6 @@
 # 平台集成
 
-Clack 是网页应用（`runtime: web`），通过 `panda.json` 声明入口和构建。网页引入平台提供的 `<script src="/_platform/sdk.js">`，得到全局 `window.panda`（`Panda.Platform`），用于访问项目 SQLite 和附件，无需安装 npm 包。SDK API 版本为 1。
+Clack 使用统一应用清单 v2，不声明后台，通过 `panda.json` 声明入口和构建。网页引入平台提供的 `<script src="/_platform/sdk.js">`，得到全局 `window.panda`（`Panda.Platform`），用于访问项目 SQLite 和附件，无需安装 npm 包。SDK API 版本为 1。
 
 ## SDK 使用
 
@@ -54,6 +54,23 @@ const unsubscribe = sdk.db.subscribe(event => {
 unsubscribe();
 ```
 
-`data.changed` 是项目级失效通知，不是行级同步。`project.updated` 表示新构建已发布，网页应提示用户明确重载，不能自动丢弃表单。`error` 事件和方法失败均使用 `PlatformError`，含 `code`、`message`、`details`、`retryable`。网络中断后的写入可能已经提交，先重新查询再决定操作，不自动重复 SQL、上传或删除。
+`data.changed` 是项目级失效通知，不是行级同步。`project.updated` 表示应用内容发生变化，网页应提示用户明确重载，不能自动丢弃表单。`error` 事件和方法失败均使用 `PlatformError`，含 `code`、`message`、`details`、`retryable`。网络中断后的写入可能已经提交，先重新查询再决定操作，不自动重复 SQL、上传或删除。
 
 平台规则和完整接口以熊猫小抽屉随附的 skill 与 `panda.d.ts` 类型声明为准。
+
+
+## 开发与验证
+
+需要 Node.js `^22.12.0` 或 `^24.0.0` 和 pnpm。
+
+```sh
+cd app
+pnpm install
+pnpm test
+pnpm run build
+```
+
+构建产物为 `app/dist/`，**随源码一起提交到仓库**，这样通过链接添加应用时平台可以直接打开，不必先构建。修改 `app/web/` 后请重新执行 `pnpm run build`，把源码和 `app/dist/` 放在同一个提交里。平台需要时也会按 `panda.json` 的 `development.build` 执行 `npm run build`，产物位置以 `web.root` 为准。构建过程不会初始化或修改数据库。
+
+
+统一清单版本为 2，无 `runtime` 字段。加后台时声明 `backend` 并准备运行文件，再执行 `app reload --app <id>`；后台日志用 `app logs --app <id>` 查看。

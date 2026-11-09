@@ -10,7 +10,6 @@ data/
 *.db-shm
 .env
 .env.*
-!.env.example
 *.log
 .DS_Store
 project.json
@@ -19,3 +18,10 @@ clack-export*.json
 
 # 无关的本地工作目录
 clone_work/
+
+.env*
+.test-artifacts/
+coverage/
+test-results/
+playwright-report/
+!.env.example

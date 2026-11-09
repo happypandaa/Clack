@@ -1,14 +1,24 @@
 {
-  "manifestVersion": 1,
-  "runtime": "web",
+  "manifestVersion": 2,
   "app": {
     "name": "Clack",
     "version": "0.1.0",
     "description": "中英文打字练习：长短不一的放松短文、逐行实时校验、错字回顾、分语言历史统计。"
   },
-  "web": { "root": "app/dist", "entry": "index.html" },
-  "platform": { "sdkApiVersion": 1 },
-  "development": { "sourceDir": "app", "build": { "kind": "npm", "script": "build" } },
+  "web": {
+    "root": "app/dist",
+    "entry": "index.html"
+  },
+  "platform": {
+    "sdkApiVersion": 1
+  },
+  "development": {
+    "sourceDir": "app",
+    "build": {
+      "kind": "npm",
+      "script": "build"
+    }
+  },
   "documentation": {
     "readme": "README.md",
     "development": "docs/platform.md",
