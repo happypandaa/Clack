@@ -25,7 +25,16 @@ function icon(name) { return '<svg viewBox="0 0 24 24" fill="none" stroke="curre
 const copy = {
   practice: ['练习', 'Practice'], history: ['记录', 'History'], mainNav: ['主导航', 'Main'],
   statusOk: ['记录已保存到项目', 'Saved to your project'], statusOff: ['暂时连不上项目数据库', 'Project database unavailable'],
-  uiLanguage: ['界面语言', 'Interface language'], theme: ['主题', 'Theme'],
+  uiLanguage: ['界面语言', 'Interface language'], theme: ['主题', 'Theme'], switchLang: ['Switch to English', '切换为中文'],
+  homeTitle: ['今天，打一段字。', 'Type a passage today.'], quickStart: ['快速开始', 'Quick start'],
+  progressNone: ['今天还没开始，目标是 3 段。', 'Nothing typed yet today. The goal is 3 passages.'],
+  progressSome: ['今天练了 {n} 段，再打 {left} 段就完成目标。', 'You have typed {n} today. {left} more to reach your goal.'],
+  progressDone: ['今天的 {goal} 段已经完成，想多打几段也很好。', 'Today’s {goal} passages are done. Keep going if you like.'],
+  progressStreak: ['已经连续 {d} 天了。', ' {d} days in a row.'],
+  keyZhSub: ['文章用中文', 'Chinese passages'], keyEnSub: ['文章用英文', 'English passages'],
+  aboutMinutes: ['约 {range} 分钟', 'about {range} min'], upNext: ['这次打', 'Up next'],
+  pickMeta: ['{count}，约 {m} 分钟', '{count}, about {m} min'], startKey: ['开始', 'Start'],
+  pickYourself: ['也可以自己挑一篇', 'Or pick one yourself'],
   ink: ['墨', 'Ink'], pine: ['松', 'Pine'], tea: ['茶', 'Tea'],
   inkDesc: ['墨：灰黑，安静专注', 'Ink: quiet greys'], pineDesc: ['松：松绿，清爽', 'Pine: fresh green'], teaDesc: ['茶：茶褐，温暖', 'Tea: warm brown'],
   libraryTitle: ['今天想打哪一段？', 'What would you like to type today?'],
@@ -91,10 +100,8 @@ let theme = state.settings.theme || 'ink';
 let compositionStart = null;
 const THEMES = ['ink', 'pine', 'tea'];
 let view = 'articles';
-let category = 'all';
-let lengthFilter = 'all';
-let search = '';
-let shuffle = 0;
+let quickLength = 'short';
+let turn = 0;
 let session = null;
 let composing = false;
 let resultRecord = null;
@@ -139,19 +146,18 @@ function candidates(lang = articleLanguage) {
     .sort((a, b) => (a.last === b.last ? a.index - b.index : a.last === '' ? -1 : b.last === '' ? 1 : a.last.localeCompare(b.last)))
     .map((item) => item.article);
 }
-function recommended() { const list = candidates(); return list[shuffle % list.length]; }
 function storageOk() { return storageMode() === 'platform'; }
 
 function topbar() {
   const historyActive = view === 'history';
-  return '<header class="topbar"><div class="topbar-left"><a href="#articles" class="brand" data-action="articles" aria-label="Clack"><span class="brand-icon">' + icon('key') + '</span><span class="brand-name">Clack</span></a>'
+  const next = ui === 'zh' ? 'en' : 'zh';
+  return '<header class="topbar"><div class="topbar-left"><a href="#articles" class="brand" data-action="articles" aria-label="Clack"><span class="brand-key" aria-hidden="true">C</span><span class="brand-name">Clack</span></a>'
     + '<nav class="nav" aria-label="' + e(t('mainNav')) + '"><a href="#articles" class="nav-link' + (historyActive ? '' : ' active') + '" data-action="articles"' + (historyActive ? '' : ' aria-current="page"') + '>' + t('practice') + '</a>'
-    + '<a href="#history" class="nav-link' + (historyActive ? ' active' : '') + '" data-action="history"' + (historyActive ? ' aria-current="page"' : '') + '>' + t('history') + '<span class="nav-count">' + n(state.records.length) + '</span></a></nav></div>'
-    + '<div class="topbar-right"><span class="status' + (storageOk() ? '' : ' warning') + '" role="status"><i class="status-dot"></i>' + t(storageOk() ? 'statusOk' : 'statusOff') + '</span>'
-    + '<div class="theme-picker" role="group" aria-label="' + e(t('theme')) + '">' + THEMES.map((name) =>
-      '<button type="button" class="theme-option" data-action="theme" data-value="' + name + '" data-focus-key="theme-' + name + '" aria-pressed="' + (theme === name) + '" title="' + e(t(name + 'Desc')) + '"><i class="swatch ' + name + '" aria-hidden="true"></i>' + t(name) + '</button>').join('') + '</div>'
-    + '<div class="segmented" role="group" aria-label="' + e(t('uiLanguage')) + '">' + [['zh', '中'], ['en', 'EN']].map(([lang, label]) =>
-      '<button type="button" data-action="ui-language" data-lang="' + lang + '" data-focus-key="ui-' + lang + '" aria-pressed="' + (ui === lang) + '" lang="' + langAttr(lang) + '">' + label + '</button>').join('') + '</div></div></header>';
+    + '<a href="#history" class="nav-link' + (historyActive ? ' active' : '') + '" data-action="history"' + (historyActive ? ' aria-current="page"' : '') + '>' + t('history') + (state.records.length ? '<span class="nav-count">' + n(state.records.length) + '</span>' : '') + '</a></nav></div>'
+    + '<div class="topbar-right">' + (storageOk() ? '' : '<span class="status" role="status"><i class="status-dot"></i>' + t('statusOff') + '</span>')
+    + '<div class="theme-dots" role="group" aria-label="' + e(t('theme')) + '">' + THEMES.map((name) =>
+      '<button type="button" class="theme-dot" data-action="theme" data-value="' + name + '" data-focus-key="theme-' + name + '" aria-pressed="' + (theme === name) + '" aria-label="' + e(t('theme') + '：' + t(name)) + '" title="' + e(t(name + 'Desc')) + '"><i class="dot-' + name + '"></i></button>').join('') + '</div>'
+    + '<button type="button" class="lang-toggle" data-action="ui-language" data-lang="' + next + '" data-focus-key="ui-toggle" aria-label="' + e(t('switchLang')) + '" lang="' + langAttr(next) + '">' + (next === 'en' ? 'EN' : '中') + '</button></div></header>';
 }
 function notices() {
   let html = '';
@@ -159,36 +165,45 @@ function notices() {
   if (pendingResults.size) html += '<div class="notice" role="status">' + e(fill('pendingResults', { count: pendingResults.size })) + '<button class="button" data-action="retry-pending">' + t('retryPending') + '</button></div>';
   return html;
 }
-function shell(content) { return '<div class="app">' + topbar() + '<main class="page">' + notices() + content + '</main></div>'; }
+function shell(content, layout = 'page') { return '<div class="app">' + topbar() + '<main class="' + layout + '">' + notices() + content + '</main></div>'; }
 
-function hero() {
-  const rec = recommended();
-  const practicedAny = state.records.length > 0;
-  const best = bestSpeed(rec.id);
-  const preview = graphemes(splitText(rec.text, rec.language, rec.language === 'zh' ? 22 : 46)[0]);
-  const badge = !practicedAny ? 'heroStart' : best ? 'heroAgain' : 'heroNext';
-  return '<section class="hero" aria-label="' + e(t(badge)) + '"><div class="hero-copy" lang="' + langAttr(rec.language) + '">'
-    + '<div class="hero-tags"><span class="hero-badge">' + t(badge) + '</span><span>' + t(rec.category) + ' · ' + t(lengthKind(rec)) + '</span></div>'
-    + '<h2>' + e(rec.title) + '</h2><p class="hero-desc">' + e(rec.description) + '</p>'
-    + '<p class="hero-meta">' + countLabel(rec) + ' · ' + t('about') + ' ' + estimate(rec) + ' ' + t('minute') + ' · ' + (best ? t('best') + ' ' + n(best) + ' ' + unit(rec.language) : t('firstTime')) + '</p>'
-    + '<div class="hero-actions"><button class="button primary" data-action="start" data-id="' + e(rec.id) + '">' + t('startPractice') + '<kbd>↵</kbd></button><button class="button secondary" data-action="shuffle">' + icon('shuffle') + t('shuffle') + '</button></div></div>'
-    + '<div class="hero-preview" aria-hidden="true"><div class="hero-preview-label">' + t('previewLine') + '</div><div class="hero-preview-text" lang="' + langAttr(rec.language) + '"><span class="current">' + e(preview[0]) + '</span>' + e(preview.slice(1).join('')) + '</div>'
-    + '<div class="hero-preview-input"><i></i>' + t('previewInput') + '</div></div></section>';
+// The quick start picks within the chosen language and length: passages not
+// practised yet come first, then the ones left alone the longest.
+function quickPool(lang = articleLanguage, length = quickLength) { return candidates(lang).filter((article) => lengthKind(article) === length); }
+function quickPick() { const pool = quickPool(); return pool.length ? pool[turn % pool.length] : candidates()[0]; }
+function minuteRange(lang, length) {
+  const values = quickPool(lang, length).map(estimate);
+  if (!values.length) return '—';
+  const low = Math.min(...values);
+  const high = Math.max(...values);
+  return low === high ? String(low) : low + '–' + high;
+}
+function progressLine() {
+  const today = todayCount();
+  const days = streak();
+  const first = today === 0 ? t('progressNone')
+    : today < DAILY_GOAL ? fill('progressSome', { n: today, left: DAILY_GOAL - today })
+      : fill('progressDone', { goal: DAILY_GOAL });
+  return e(first + (days >= 2 ? fill('progressStreak', { d: days }) : ''));
+}
+function keycap(attrs, pressed, label, sub, langOfLabel) {
+  return '<button type="button" class="key" ' + attrs + ' aria-pressed="' + pressed + '"><i class="led" aria-hidden="true"></i><span class="key-label"' + (langOfLabel ? ' lang="' + langOfLabel + '"' : '') + '>' + e(label) + '</span><span class="key-sub">' + e(sub) + '</span></button>';
 }
 function library() {
-  const today = todayCount();
-  const date = new Date().toLocaleDateString(ui === 'en' ? 'en-US' : 'zh-CN', { weekday: 'long', month: 'long', day: 'numeric' });
-  return '<div class="library-head"><div><p class="date-line">' + e(date) + '</p><h1>' + t('libraryTitle') + '</h1></div>'
-    + '<div class="today card"><div><div class="today-label">' + t('todayGoal') + '</div><div class="today-value"><span class="num">' + n(today) + '</span>/ ' + DAILY_GOAL + ' ' + t('goalUnit') + '</div></div>'
-    + '<div class="today-bars" aria-hidden="true">' + Array.from({ length: DAILY_GOAL }, (_, index) => '<i' + (index < today ? ' class="on"' : '') + '></i>').join('') + '</div>'
-    + '<div class="today-divider"></div><div><div class="today-label">' + t('streak') + '</div><div class="today-value"><span class="num">' + n(streak()) + '</span>' + t('days') + '</div></div></div></div>'
-    + hero()
-    + '<section aria-labelledby="all-heading"><div class="list-head"><div class="list-head-left"><h2 id="all-heading">' + t('allPassages') + '</h2>' + languageTabs('library') + '</div>'
-    + '<label class="search">' + icon('search') + '<span class="visually-hidden">' + t('search') + '</span><input type="search" id="article-search" placeholder="' + e(t('search')) + '" value="' + e(search) + '"></label></div>'
-    + '<div class="filters"><div class="chips" role="group" aria-label="' + e(t('category')) + '">' + ['all', 'daily', 'nature', 'thoughts'].map((item) => '<button type="button" class="chip" data-action="category" data-value="' + item + '" aria-pressed="' + (category === item) + '">' + t(item) + '</button>').join('') + '</div>'
-    + '<div class="chips" role="group" aria-label="' + e(t('lengthLabel')) + '"><span class="chips-label">' + t('lengthLabel') + '</span>' + ['all', 'short', 'medium', 'long'].map((item) => '<button type="button" class="chip" data-action="length" data-value="' + item + '" aria-pressed="' + (lengthFilter === item) + '">' + t(item) + '</button>').join('') + '</div></div>'
-    + '<div class="card article-list" id="article-list"></div></section>'
-    + '<p class="hint-line">' + t('hint') + '</p>';
+  const pick = quickPick();
+  return '<h1>' + t('homeTitle') + '</h1><p class="home-progress">' + progressLine() + '</p>'
+    + '<section class="plate" aria-label="' + e(t('quickStart')) + '">'
+    + '<div class="plate-row"><div class="key-group lang" role="group" aria-label="' + e(t('articleLanguage')) + '">'
+    + keycap('data-action="article-language" data-language="zh" data-focus-key="lang-zh"', articleLanguage === 'zh', '中文', t('keyZhSub'), 'zh-CN')
+    + keycap('data-action="article-language" data-language="en" data-focus-key="lang-en"', articleLanguage === 'en', 'English', t('keyEnSub'), 'en')
+    + '</div><div class="key-group len" role="group" aria-label="' + e(t('lengthLabel')) + '">'
+    + ['short', 'medium', 'long'].map((length) => keycap('data-action="quick-length" data-value="' + length + '" data-focus-key="len-' + length + '"', quickLength === length, t(length), fill('aboutMinutes', { range: minuteRange(articleLanguage, length) }))).join('')
+    + '</div></div>'
+    + '<div class="plate-row"><div class="screen"><div class="screen-text"><div class="screen-label">' + t('upNext') + '</div>'
+    + '<div class="screen-line"><span class="screen-title" lang="' + langAttr(pick.language) + '">' + e(pick.title) + '</span><span class="screen-meta">' + e(fill('pickMeta', { count: countLabel(pick), m: estimate(pick) })) + '</span></div></div>'
+    + '<button type="button" class="small-key" data-action="shuffle" data-focus-key="shuffle">' + icon('shuffle') + t('shuffle') + '</button></div>'
+    + '<button type="button" class="go-key" data-action="start" data-id="' + e(pick.id) + '"><span class="go-label">' + t('startKey') + '</span><span class="go-hint">Enter ↵</span></button></div></section>'
+    + '<section class="picks" aria-labelledby="picks-heading"><h2 id="picks-heading">' + t('pickYourself') + '</h2><div id="article-list"></div></section>';
 }
 function languageTabs(scope) {
   return '<div class="segmented" role="group" aria-label="' + e(t('articleLanguage')) + '">' + ['zh', 'en'].map((lang) =>
@@ -197,31 +212,21 @@ function languageTabs(scope) {
 function renderCards() {
   const list = document.querySelector('#article-list');
   if (!list) return;
-  const query = search.trim().toLocaleLowerCase();
-  const found = articles.filter((article) => article.language === articleLanguage
-    && (category === 'all' || category === article.category)
-    && (lengthFilter === 'all' || lengthFilter === lengthKind(article))
-    && (!query || (article.title + article.description + article.text).toLocaleLowerCase().includes(query)));
-  list.innerHTML = found.length ? found.map((article, index) => {
+  list.innerHTML = articles.filter((article) => article.language === articleLanguage).map((article) => {
     const best = bestSpeed(article.id);
-    const kind = lengthKind(article);
-    return '<button type="button" class="article-row" data-action="start" data-id="' + e(article.id) + '" lang="' + langAttr(article.language) + '">'
-      + '<span class="article-no">' + String(index + 1).padStart(2, '0') + '</span>'
-      + '<span class="article-main"><span class="article-title">' + e(article.title) + '</span><span class="article-desc">' + e(article.description) + '</span></span>'
-      + '<span class="article-cat">' + t(article.category) + '</span><span class="length-pill' + (kind === 'long' ? ' long' : '') + '">' + t(kind) + '</span>'
-      + '<span class="article-len">' + countLabel(article) + ' · ' + estimate(article) + ' ' + t('minute') + '</span>'
-      + '<span class="article-best' + (best ? ' has' : '') + '">' + (best ? t('best') + ' ' + n(best) + ' ' + unit(article.language) : t('firstTime')) + '</span>'
-      + '<span class="row-arrow">' + icon('arrow') + '</span></button>';
-  }).join('') : '<div class="empty">' + icon('search') + '<h3>' + t('noResults') + '</h3><p>' + t('noResultsDesc') + '</p><button class="button secondary" data-action="reset-filters">' + t('resetFilters') + '</button></div>';
+    return '<button type="button" class="pick" data-action="start" data-id="' + e(article.id) + '" lang="' + langAttr(article.language) + '">'
+      + '<span class="pick-title">' + e(article.title) + '</span>'
+      + '<span class="pick-meta" lang="' + langAttr(ui) + '">' + t(lengthKind(article)) + '　' + countLabel(article) + '</span>'
+      + '<span class="pick-best' + (best ? ' has' : '') + '" lang="' + langAttr(ui) + '">' + (best ? t('best') + ' ' + n(best) + ' ' + unit(article.language) : t('firstTime')) + '</span></button>';
+  }).join('');
 }
-
 function practiceHeading(article) {
   const title = session.drill ? t('drillTitle') + ' · ' + article.title : article.title;
   return '<div class="practice-heading" lang="' + langAttr(article.language) + '"><h1>' + e(title) + '</h1><p>' + t(article.language) + ' · ' + t(article.category) + ' · ' + countLabel(article) + '</p></div>';
 }
 function backButton() { return '<button class="button ghost back" data-action="articles">' + icon('back') + t('back') + '</button>'; }
 function practice() {
-  if (!session) { view = 'articles'; return shell(library()); }
+  if (!session) { view = 'articles'; return shell(library(), 'home'); }
   if (session.status === 'complete') return result();
   const article = session.article;
   const paused = session.status === 'paused';
@@ -336,7 +341,7 @@ function render(focusKey) {
   document.documentElement.lang = ui === 'en' ? 'en' : 'zh-CN';
   document.documentElement.dataset.theme = theme;
   document.title = 'Clack';
-  app.innerHTML = view === 'articles' ? shell(library()) : view === 'history' ? shell(history()) : practice();
+  app.innerHTML = view === 'articles' ? shell(library(), 'home') : view === 'history' ? shell(history()) : practice();
   if (view === 'articles') renderCards();
   if (view === 'practice' && session && session.status !== 'complete') {
     const input = document.querySelector('#typing-input');
@@ -527,7 +532,7 @@ async function persistResult(record = resultRecord) {
 }
 function navigate(next) {
   if (session?.status === 'running') pauseSession(session);
-  composing = false; view = next; search = ''; render(); window.scrollTo(0, 0);
+  composing = false; view = next; render(); window.scrollTo(0, 0);
 }
 async function preferences(value) {
   try { state = await saveSettings(value); } catch { toast('settingsFailed'); }
@@ -545,7 +550,7 @@ app.addEventListener('click', (event) => {
   else if (action === 'ui-language') {
     if (node.dataset.lang === ui) return;
     if (session?.status === 'running') pauseSession(session);
-    composing = false; ui = node.dataset.lang; render('ui-' + ui); void preferences({ uiLanguage: ui });
+    composing = false; ui = node.dataset.lang; render('ui-toggle'); void preferences({ uiLanguage: ui });
   } else if (action === 'theme') {
     if (node.dataset.value === theme) return;
     theme = node.dataset.value;
@@ -554,17 +559,13 @@ app.addEventListener('click', (event) => {
     void preferences({ theme });
   } else if (action === 'article-language') {
     if (node.dataset.language === articleLanguage) return;
-    articleLanguage = node.dataset.language; category = 'all'; lengthFilter = 'all'; search = ''; shuffle = 0;
+    articleLanguage = node.dataset.language; turn = 0;
     render('lang-' + articleLanguage); void preferences({ articleLanguage });
-  } else if (action === 'category') { category = node.dataset.value; setPressed('category', category); renderCards(); }
-  else if (action === 'length') { lengthFilter = node.dataset.value; setPressed('length', lengthFilter); renderCards(); }
-  else if (action === 'reset-filters') { category = 'all'; lengthFilter = 'all'; search = ''; render(); }
-  else if (action === 'shuffle') {
-    shuffle += 1;
-    document.querySelector('.hero')?.insertAdjacentHTML('afterend', hero());
-    document.querySelector('.hero')?.remove();
-    document.querySelector('[data-action="shuffle"]')?.focus({ preventScroll: true });
-  } else if (action === 'start') start(node.dataset.id);
+  } else if (action === 'quick-length') {
+    if (node.dataset.value === quickLength) return;
+    quickLength = node.dataset.value; turn = 0; render('len-' + quickLength);
+  } else if (action === 'shuffle') { turn += 1; render('shuffle'); }
+  else if (action === 'start') start(node.dataset.id);
   else if (action === 'restart') restart();
   else if (action === 'drill') startDrill();
   else if (action === 'pause') togglePause();
@@ -582,7 +583,6 @@ app.addEventListener('click', (event) => {
     const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'clack-history-' + new Date().toISOString().slice(0, 10) + '.json'; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   } else if (action === 'import') document.querySelector('#import-file').click();
 });
-app.addEventListener('input', (event) => { if (event.target.id === 'article-search') { search = event.target.value; renderCards(); } });
 app.addEventListener('change', async (event) => {
   if (event.target.id !== 'import-file' || !event.target.files?.[0]) return;
   const file = event.target.files[0];
@@ -594,7 +594,7 @@ app.addEventListener('change', async (event) => {
 document.addEventListener('keydown', (event) => {
   if (event.isComposing || event.defaultPrevented) return;
   const inControl = event.target.closest?.('input, textarea, button, a, select, summary, [contenteditable]');
-  if (view === 'articles' && event.key === 'Enter' && !inControl) { event.preventDefault(); start(recommended().id); }
+  if (view === 'articles' && event.key === 'Enter' && !inControl) { event.preventDefault(); start(quickPick().id); }
   else if (view === 'practice' && session?.status === 'paused' && event.key === 'Escape') { event.preventDefault(); togglePause(); }
   else if (view === 'practice' && session && event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); restart(); }
 });
